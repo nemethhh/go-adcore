@@ -26,6 +26,7 @@ type object struct {
 	gmsa     adcore.GMSA
 
 	members map[string]bool // member GUIDs
+	dacl    []adcore.ACE    // explicit access-control entries
 }
 
 type store struct {
@@ -79,6 +80,8 @@ func NewRecording(dnc string) (adcore.Directory, *Recorder) {
 		User:           &fakeUser{s: s},
 		Computer:       &fakeComputer{s: s},
 		ServiceAccount: &fakeServiceAccount{s: s},
+		ACL:            &fakeACL{s: s},
+		Schema:         &fakeSchema{s: s},
 		Server:         "fake.corp.local",
 		DNC:            dnc,
 		Closer:         noopCloser{},
