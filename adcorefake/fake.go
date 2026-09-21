@@ -108,11 +108,17 @@ func (s *store) findLocked(id adcore.Identity) *object {
 			}
 		}
 	case "sam":
+		// A computer and a gMSA carry the un-suffixed base in the model while
+		// Active Directory stores the "$"-suffixed down-level logon name, so a
+		// caller addressing one by sAMAccountName sends the suffixed form.
+		// Both spellings must resolve here, or a lookup that works against a
+		// real domain reports not-found against this directory.
+		bare := strings.TrimSuffix(arg, "$")
 		for _, o := range s.byDN {
 			if strings.EqualFold(o.group.SamAccountName, arg) ||
 				strings.EqualFold(o.user.SamAccountName, arg) ||
-				strings.EqualFold(o.computer.SamAccountName, arg) ||
-				strings.EqualFold(o.gmsa.SamAccountName, arg) {
+				strings.EqualFold(o.computer.SamAccountName, bare) ||
+				strings.EqualFold(o.gmsa.SamAccountName, bare) {
 				return o
 			}
 		}
