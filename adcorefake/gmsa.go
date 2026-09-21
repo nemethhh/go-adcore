@@ -11,6 +11,11 @@ type fakeServiceAccount struct{ s *store }
 
 var _ adcore.ServiceAccountDirectory = (*fakeServiceAccount)(nil)
 
+// defaultManagedPasswordInterval is what New-ADServiceAccount writes when the
+// caller names no interval, and what a raw LDAP create must write too: the
+// attribute is the gMSA class's only mandatory one.
+const defaultManagedPasswordInterval = 30
+
 func (f *fakeServiceAccount) Create(ctx context.Context, spec adcore.GMSASpec) (*adcore.GMSA, error) {
 	const op = "ServiceAccount.Create"
 	if err := spec.Validate(op, true); err != nil {
@@ -41,7 +46,10 @@ func (f *fakeServiceAccount) Create(ctx context.Context, spec adcore.GMSASpec) (
 	applyGMSASpec(&o.gmsa, spec)
 	o.gmsa.PrincipalsAllowed = principals
 	// Create-only: the interval is settable here and nowhere else, because
-	// Active Directory refuses a modify of msDS-ManagedPasswordInterval.
+	// Active Directory refuses a modify of msDS-ManagedPasswordInterval. It is
+	// also mandatory on the class, so a caller that names none gets AD's own
+	// default rather than a zero the real backends never report.
+	o.gmsa.ManagedPasswordIntervalInDays = defaultManagedPasswordInterval
 	if spec.ManagedPasswordIntervalInDays != nil {
 		o.gmsa.ManagedPasswordIntervalInDays = *spec.ManagedPasswordIntervalInDays
 	}
