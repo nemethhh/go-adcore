@@ -19,9 +19,11 @@ type object struct {
 	dn    string
 	class string
 
-	ou    adcore.OU
-	group adcore.Group
-	user  adcore.User
+	ou       adcore.OU
+	group    adcore.Group
+	user     adcore.User
+	computer adcore.Computer
+	gmsa     adcore.GMSA
 
 	members map[string]bool // member GUIDs
 }
@@ -72,12 +74,14 @@ func NewRecording(dnc string) (adcore.Directory, *Recorder) {
 		locks: adcore.NewKeyedMutex(), passwords: map[string][]string{},
 	}
 	return adcore.Directory{
-		OU:     &fakeOU{s: s},
-		Group:  &fakeGroup{s: s},
-		User:   &fakeUser{s: s},
-		Server: "fake.corp.local",
-		DNC:    dnc,
-		Closer: noopCloser{},
+		OU:             &fakeOU{s: s},
+		Group:          &fakeGroup{s: s},
+		User:           &fakeUser{s: s},
+		Computer:       &fakeComputer{s: s},
+		ServiceAccount: &fakeServiceAccount{s: s},
+		Server:         "fake.corp.local",
+		DNC:            dnc,
+		Closer:         noopCloser{},
 	}, &Recorder{s: s}
 }
 
@@ -105,13 +109,17 @@ func (s *store) findLocked(id adcore.Identity) *object {
 		}
 	case "sam":
 		for _, o := range s.byDN {
-			if strings.EqualFold(o.group.SamAccountName, arg) || strings.EqualFold(o.user.SamAccountName, arg) {
+			if strings.EqualFold(o.group.SamAccountName, arg) ||
+				strings.EqualFold(o.user.SamAccountName, arg) ||
+				strings.EqualFold(o.computer.SamAccountName, arg) ||
+				strings.EqualFold(o.gmsa.SamAccountName, arg) {
 				return o
 			}
 		}
 	case "sid":
 		for _, o := range s.byDN {
-			if o.group.SID == arg || o.user.SID == arg {
+			if o.group.SID == arg || o.user.SID == arg ||
+				o.computer.SID == arg || o.gmsa.SID == arg {
 				return o
 			}
 		}
@@ -176,6 +184,7 @@ func (s *store) moveLocked(o *object, newDN string) {
 		child.dn = moved
 		s.byDN[moved] = child
 		child.ou.DN, child.group.DN, child.user.DN = moved, moved, moved
+		child.computer.DN, child.gmsa.DN = moved, moved
 	}
 }
 
