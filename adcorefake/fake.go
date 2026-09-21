@@ -32,6 +32,12 @@ type store struct {
 	byDN  map[string]*object
 	seq   int
 	locks *adcore.KeyedMutex
+
+	// passwords records every password ever set, by GUID, so a test can
+	// assert that a rotation actually happened. A Directory cannot express
+	// that question, and asserting it only on one backend would leave the
+	// other's password path untested.
+	passwords map[string][]string
 }
 
 type noopCloser struct{}
@@ -40,7 +46,31 @@ func (noopCloser) Close() error { return nil }
 
 // New returns an empty directory rooted at dnc.
 func New(dnc string) adcore.Directory {
-	s := &store{dnc: dnc, byDN: map[string]*object{}, locks: adcore.NewKeyedMutex()}
+	d, _ := NewRecording(dnc)
+	return d
+}
+
+// Recorder exposes what the fake observed, for assertions an adcore.Directory
+// cannot express.
+type Recorder struct{ s *store }
+
+// Passwords returns the password history for every account, keyed by GUID.
+func (r *Recorder) Passwords() map[string][]string {
+	r.s.mu.Lock()
+	defer r.s.mu.Unlock()
+	out := make(map[string][]string, len(r.s.passwords))
+	for k, v := range r.s.passwords {
+		out[k] = append([]string(nil), v...)
+	}
+	return out
+}
+
+// NewRecording returns a directory and a handle on what it observed.
+func NewRecording(dnc string) (adcore.Directory, *Recorder) {
+	s := &store{
+		dnc: dnc, byDN: map[string]*object{},
+		locks: adcore.NewKeyedMutex(), passwords: map[string][]string{},
+	}
 	return adcore.Directory{
 		OU:     &fakeOU{s: s},
 		Group:  &fakeGroup{s: s},
@@ -48,7 +78,7 @@ func New(dnc string) adcore.Directory {
 		Server: "fake.corp.local",
 		DNC:    dnc,
 		Closer: noopCloser{},
-	}
+	}, &Recorder{s: s}
 }
 
 func (s *store) nextGUID() string {
@@ -165,4 +195,13 @@ func inScope(dn string, q adcore.Query) bool {
 		return eqDN(dn, base) ||
 			strings.HasSuffix(strings.ToLower(dn), ","+strings.ToLower(base))
 	}
+}
+
+// recordPasswordLocked appends a password a spec carried, so a create followed
+// by a rotation leaves a history of two.
+func (s *store) recordPasswordLocked(guid string, password *adcore.Secret) {
+	if password == nil || password.IsZero() {
+		return
+	}
+	s.passwords[guid] = append(s.passwords[guid], adcore.RevealSecret(*password))
 }

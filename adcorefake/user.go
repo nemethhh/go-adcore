@@ -40,6 +40,7 @@ func (f *fakeUser) Create(ctx context.Context, spec adcore.UserSpec) (*adcore.Us
 		SID: "S-1-5-21-0-0-0-" + fmt.Sprint(f.s.seq),
 	}
 	applyUserSpec(&o.user, spec)
+	f.s.recordPasswordLocked(o.guid, spec.Password)
 	f.s.byDN[dn] = o
 
 	m := o.user
@@ -133,6 +134,7 @@ func (f *fakeUser) Update(ctx context.Context, id adcore.Identity, spec adcore.U
 		o.user.SamAccountName = spec.SamAccountName
 	}
 	applyUserSpec(&o.user, spec)
+	f.s.recordPasswordLocked(o.guid, spec.Password)
 
 	name := o.user.Name
 	if spec.Name != nil && *spec.Name != "" {
@@ -176,8 +178,10 @@ func (f *fakeUser) SetPassword(ctx context.Context, id adcore.Identity, password
 	f.s.mu.Lock()
 	defer f.s.mu.Unlock()
 
-	if o := f.s.findLocked(id); o == nil || o.class != "user" {
+	o := f.s.findLocked(id)
+	if o == nil || o.class != "user" {
 		return notFound(op, id)
 	}
+	f.s.passwords[o.guid] = append(f.s.passwords[o.guid], adcore.RevealSecret(password))
 	return nil
 }
